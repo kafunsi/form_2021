@@ -1,383 +1,405 @@
 <?php
 require_once __DIR__ . '/config.php';
-$id = intval($_GET['id'] ?? 0);
-if ($id <= 0) { header('Location: projects.php'); exit; }
-
-// handle new opinion/planning
-$success = '';
+// create project
 $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $type = ($_POST['type'] === 'planning') ? 'planning' : 'opinion';
-    $content = trim($_POST['content'] ?? '');
-    if ($content !== '') {
-        $userId = is_logged_in() ? $_SESSION['user']['id'] : null;
-        $stmt = $pdo->prepare('INSERT INTO opinions (project_id,user_id,type,content) VALUES (?,?,?,?)');
-        $stmt->execute([$id,$userId,$type,$content]);
-        $success = 'Your comment has been posted successfully!';
-        // Refresh to show new comment
-        header('Refresh: 2; url=project.php?id=' . $id);
-    } else {
-        $error = 'Please enter your comment before submitting.';
+    if (!is_logged_in()) { $error = 'Please login to submit an idea.'; }
+    else if ($_SESSION['user']['role'] !== 'submitter') { $error = 'Only submitter users can add new ideas.'; }
+    else {
+        $title = trim($_POST['title'] ?? '');
+        $desc = trim($_POST['description'] ?? '');
+        if ($title === '') { $error = 'Please enter your idea.'; }
+        else {
+            $stmt = $pdo->prepare('INSERT INTO projects (title,description,creator_id) VALUES (?,?,?)');
+            $stmt->execute([$title,$desc,$_SESSION['user']['id']]);
+            header('Location: projects.php'); exit;
+        }
     }
 }
 
-$stmt = $pdo->prepare('SELECT p.*, u.name as creator FROM projects p JOIN users u ON p.creator_id = u.id WHERE p.id = ?');
-$stmt->execute([$id]);
-$project = $stmt->fetch();
-if (!$project) { header('Location: projects.php'); exit; }
-
-$opinions = $pdo->prepare('SELECT o.*, COALESCE(u.name, "Anonymous") AS author FROM opinions o LEFT JOIN users u ON o.user_id = u.id WHERE o.project_id = ? ORDER BY o.created_at DESC');
-$opinions->execute([$id]);
-$opinions = $opinions->fetchAll();
+$projects = $pdo->query('SELECT p.*, u.name as creator FROM projects p JOIN users u ON p.creator_id = u.id ORDER BY p.created_at DESC')->fetchAll();
 ?>
-<?php include 'header.php'; ?>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>form_2021 Ruchugi Secondary | Mawazo Ideas</title>
+  <!-- Google Fonts & simple reset styling -->
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
 
-<style>
-    /* Project Detail Styles */
-    .project-detail {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border-radius: 20px;
-        padding: 30px;
-        margin-bottom: 40px;
-        color: white;
-        box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+    body {
+      background: linear-gradient(145deg, #f6f9fc 0%, #eef2f5 100%);
+      font-family: 'Segoe UI', 'Inter', system-ui, -apple-system, 'Roboto', 'Helvetica Neue', sans-serif;
+      color: #1a2c3e;
+      line-height: 1.5;
+      padding: 2rem 1.5rem;
+      min-height: 100vh;
     }
-    
-    .project-detail h2 {
-        font-size: 2.5rem;
-        margin-bottom: 15px;
-        font-weight: 700;
-        text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+
+    /* main container for consistent width */
+    body > * {
+      max-width: 1280px;
+      margin-left: auto;
+      margin-right: auto;
     }
-    
-    .project-detail .meta {
-        color: rgba(255,255,255,0.9);
-        font-size: 0.95rem;
-        margin-bottom: 20px;
-        padding-bottom: 15px;
-        border-bottom: 2px solid rgba(255,255,255,0.2);
+
+    /* header area */
+    header {
+      margin-bottom: 2rem;
+      animation: fadeSlideDown 0.5s ease-out;
     }
-    
-    .project-detail p {
-        font-size: 1.1rem;
-        line-height: 1.6;
-        color: rgba(255,255,255,0.95);
+
+    h1 {
+      font-size: 2.4rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, #1e4668, #2b5a8c);
+      background-clip: text;
+      -webkit-background-clip: text;
+      color: transparent;
+      letter-spacing: -0.3px;
+      margin-bottom: 0.5rem;
+      text-shadow: 2px 2px 6px rgba(0,0,0,0.02);
+      border-left: 5px solid #ffb347;
+      padding-left: 1.2rem;
     }
-    
-    /* Comment Form Styles */
-    .comment-form-container {
-        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-        border-radius: 20px;
-        padding: 30px;
-        margin-bottom: 40px;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+
+    nav {
+      background: rgba(255,255,255,0.7);
+      backdrop-filter: blur(4px);
+      padding: 0.75rem 1.2rem;
+      border-radius: 60px;
+      display: inline-flex;
+      flex-wrap: wrap;
+      gap: 0.6rem 1rem;
+      margin-top: 0.75rem;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+      font-weight: 500;
     }
-    
-    .comment-form-container h3 {
-        color: #2c3e50;
+
+    nav a {
+      color: #1f5e8c;
+      text-decoration: none;
+      font-weight: 600;
+      transition: all 0.2s ease;
+      padding: 0.2rem 0.3rem;
+      border-radius: 30px;
+    }
+
+    nav a:hover {
+      color: #e67e22;
+      background-color: rgba(230,126,34,0.08);
+      transform: translateY(-1px);
+    }
+
+    hr {
+      margin: 0.8rem 0 1rem 0;
+      border: none;
+      height: 2px;
+      background: linear-gradient(90deg, #cbdbe0, #e2e8f0, #cbdbe0);
+      border-radius: 4px;
+    }
+
+    /* main content boxes */
+    h2 {
+      font-size: 2.2rem;
+      font-weight: 700;
+      margin: 2rem 0 0.75rem 0;
+      color: #1e3a5f;
+      display: inline-block;
+      background: linear-gradient(120deg, #f9f3e3, transparent);
+      padding: 0.2rem 1rem 0.2rem 0.8rem;
+      border-radius: 0 40px 40px 0;
+    }
+
+    h3 {
+      font-size: 1.6rem;
+      font-weight: 600;
+      margin: 1.8rem 0 1rem 0;
+      color: #2c4e6e;
+      border-bottom: 3px dotted #ffb347;
+      display: inline-block;
+      padding-bottom: 0.2rem;
+    }
+
+    /* card & container for mawazo */
+    .idea-card {
+      background: #ffffffdd;
+      backdrop-filter: blur(2px);
+      background: white;
+      border-radius: 32px;
+      padding: 1.8rem 2rem;
+      margin: 1.5rem 0;
+      box-shadow: 0 20px 35px -12px rgba(0, 0, 0, 0.1);
+      transition: all 0.25s ease;
+      border: 1px solid rgba(255,255,240,0.8);
+    }
+
+    .idea-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 28px 36px -14px rgba(0, 0, 0, 0.15);
+      border-color: #ffd8ae;
+    }
+
+    .cta-message {
+      background: linear-gradient(115deg, #ffe9d4, #fff6ed);
+      border-left: 8px solid #ffb347;
+      border-radius: 24px;
+      padding: 1.2rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin: 0.5rem 0 1.5rem 0;
+    }
+
+    .cta-message p {
+      margin: 0;
+      font-size: 1.2rem;
+      font-weight: 500;
+      color: #a5561f;
+    }
+
+    .btn-login {
+      background: #ff9f4a;
+      border: none;
+      padding: 0.65rem 1.6rem;
+      border-radius: 40px;
+      font-weight: 700;
+      font-size: 1rem;
+      color: white;
+      text-decoration: none;
+      display: inline-block;
+      transition: 0.2s;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+    }
+
+    .btn-login:hover {
+      background: #e67e22;
+      transform: scale(0.97);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+
+    /* idea list mockup */
+    .ideas-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 1.2rem;
+      margin: 1rem 0 2rem;
+    }
+
+    .idea-item {
+      background: white;
+      border-radius: 28px;
+      padding: 1.2rem 1.6rem;
+      transition: all 0.2s;
+      border: 1px solid #e9edf2;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .idea-emoji {
+      font-size: 2.2rem;
+      background: #fef4e8;
+      width: 56px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 60px;
+    }
+
+    .idea-content {
+      flex: 1;
+    }
+
+    .idea-title {
+      font-weight: 800;
+      font-size: 1.25rem;
+      color: #1f4662;
+      margin-bottom: 0.3rem;
+    }
+
+    .idea-desc {
+      color: #3e5a6c;
+      font-size: 0.95rem;
+      margin-top: 0.25rem;
+    }
+
+    .idea-meta {
+      font-size: 0.75rem;
+      color: #8aa0b0;
+      margin-top: 0.5rem;
+      display: flex;
+      gap: 1rem;
+    }
+
+    /* footer */
+    footer {
+      margin-top: 3.5rem;
+    }
+
+    footer hr {
+      background: linear-gradient(90deg, #cddae9, #ffffff, #cddae9);
+      height: 1px;
+    }
+
+    footer p {
+      text-align: center;
+      font-size: 0.85rem;
+      color: #4b6f8c;
+      padding: 1rem 0.5rem;
+      font-weight: 500;
+    }
+
+    /* animations */
+    @keyframes fadeSlideDown {
+      0% {
+        opacity: 0;
+        transform: translateY(-20px);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* responsiveness */
+    @media (max-width: 680px) {
+      body {
+        padding: 1rem;
+      }
+      h1 {
         font-size: 1.8rem;
-        margin-bottom: 20px;
-        font-weight: 600;
-    }
-    
-    .form-group {
-        margin-bottom: 20px;
-    }
-    
-    .form-group label {
-        display: block;
-        margin-bottom: 8px;
-        color: #2c3e50;
-        font-weight: 600;
-        font-size: 1rem;
-    }
-    
-    .form-group select {
-        width: 100%;
-        padding: 12px;
-        border: 2px solid #e0e0e0;
-        border-radius: 10px;
-        font-size: 1rem;
-        transition: all 0.3s ease;
-        background: white;
-    }
-    
-    .form-group select:focus {
-        outline: none;
-        border-color: #667eea;
-        box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
-    }
-    
-    .form-group textarea {
-        width: 100%;
-        padding: 12px;
-        border: 2px solid #e0e0e0;
-        border-radius: 10px;
-        font-size: 1rem;
-        min-height: 120px;
-        transition: all 0.3s ease;
-        font-family: inherit;
-    }
-    
-    .form-group textarea:focus {
-        outline: none;
-        border-color: #667eea;
-        box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
-    }
-    
-    .btn-submit {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border: none;
-        padding: 12px 30px;
-        border-radius: 10px;
-        font-size: 1rem;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        width: 100%;
-    }
-    
-    .btn-submit:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 10px 20px rgba(102,126,234,0.3);
-    }
-    
-    .info-note {
-        background: rgba(102,126,234,0.1);
-        padding: 12px;
-        border-radius: 10px;
-        text-align: center;
-        margin-top: 15px;
-        color: #667eea;
-        font-size: 0.9rem;
-    }
-    
-    /* Comments Section */
-    .comments-section {
-        margin-top: 40px;
-    }
-    
-    .comments-section h3 {
-        color: #2c3e50;
-        font-size: 1.8rem;
-        margin-bottom: 20px;
-        font-weight: 600;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
-    
-    .comments-count {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 5px 12px;
-        border-radius: 20px;
-        font-size: 1rem;
-    }
-    
-    .comment-card {
-        background: white;
-        border-radius: 15px;
-        padding: 20px;
-        margin-bottom: 20px;
-        box-shadow: 0 5px 15px rgba(0,0,0,0.08);
-        transition: all 0.3s ease;
-        border-left: 4px solid #667eea;
-    }
-    
-    .comment-card:hover {
-        transform: translateX(5px);
-        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
-    }
-    
-    .comment-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 15px;
+        padding-left: 0.8rem;
+      }
+      h2 {
+        font-size: 1.7rem;
+      }
+      .cta-message {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      nav {
         flex-wrap: wrap;
-        gap: 10px;
+        padding: 0.6rem 1rem;
+      }
+      .idea-emoji {
+        width: 44px;
+        height: 44px;
+        font-size: 1.7rem;
+      }
     }
-    
-    .comment-type {
-        display: inline-block;
-        padding: 5px 15px;
-        border-radius: 20px;
-        font-size: 0.85rem;
-        font-weight: 600;
-        text-transform: uppercase;
+
+    /* subtle decoration */
+    .insight-badge {
+      display: inline-block;
+      background: #eef3fc;
+      padding: 0.25rem 0.8rem;
+      border-radius: 30px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #2c628b;
+      margin-right: 0.5rem;
     }
-    
-    .comment-type.opinion {
-        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-        color: white;
-    }
-    
-    .comment-type.planning {
-        background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
-        color: white;
-    }
-    
-    .comment-author {
-        color: #667eea;
-        font-weight: 600;
-        font-size: 0.95rem;
-    }
-    
-    .comment-date {
-        color: #7f8c8d;
-        font-size: 0.85rem;
-    }
-    
-    .comment-content {
-        color: #34495e;
-        line-height: 1.6;
-        font-size: 1rem;
-    }
-    
-    /* Alert Messages */
-    .alert {
-        padding: 15px 20px;
-        border-radius: 10px;
-        margin-bottom: 20px;
-        font-weight: 500;
-    }
-    
-    .alert-success {
-        background: #d4edda;
-        color: #155724;
-        border: 1px solid #c3e6cb;
-    }
-    
-    .alert-error {
-        background: #f8d7da;
-        color: #721c24;
-        border: 1px solid #f5c6cb;
-    }
-    
-    /* Empty State */
-    .empty-comments {
-        text-align: center;
-        padding: 60px 20px;
-        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-        border-radius: 15px;
-        color: #666;
-    }
-    
-    .empty-comments p {
-        font-size: 1.1rem;
-        margin: 10px 0;
-    }
-    
-    /* Responsive Design */
-    @media (max-width: 768px) {
-        .project-detail {
-            padding: 20px;
-        }
-        
-        .project-detail h2 {
-            font-size: 1.8rem;
-        }
-        
-        .comment-form-container {
-            padding: 20px;
-        }
-        
-        .comment-header {
-            flex-direction: column;
-            align-items: flex-start;
-        }
-    }
-    
-    /* Animation */
-    @keyframes fadeIn {
-        from {
-            opacity: 0;
-            transform: translateY(20px);
-        }
-        to {
-            opacity: 1;
-            transform: translateY(0);
-        }
-    }
-    
-    .comment-card {
-        animation: fadeIn 0.5s ease-out;
-    }
-</style>
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>📚 form_2021 · Ruchugi Secondary</h1>
+  <nav>
+    <a href="projects.php">🌱 Mawazo</a>
+    <span style="color:#cbd5e1;">|</span>
+    <a href="login.php">🔐 Login</a>
+    <a href="register.php">📝 Register</a>
+    <a href="admin.php">⚙️ Admin Login</a>
+  </nav>
+  <hr>
+</header>
 
 <main>
-    <?php if($success): ?>
-        <div class="alert alert-success"><?php echo htmlspecialchars($success); ?></div>
-    <?php endif; ?>
-    
-    <?php if($error): ?>
-        <div class="alert alert-error"><?php echo htmlspecialchars($error); ?></div>
-    <?php endif; ?>
-
-    <div class="project-detail">
-        <h2><?php echo htmlspecialchars($project['title']); ?></h2>
-        <div class="meta">
-            <strong>👤 By <?php echo htmlspecialchars($project['creator']); ?></strong> · 
-            📅 <?php echo date('F j, Y, g:i a', strtotime($project['created_at'])); ?>
-        </div>
-        <p><?php echo nl2br(htmlspecialchars($project['description'])); ?></p>
+  <!-- welcome & inspiration section -->
+  <div class="idea-card">
+    <div style="display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.5rem;">
+      <span class="insight-badge">✨ Student Corner</span>
+      <span class="insight-badge">💡 Innovation Hub</span>
     </div>
+    <p style="font-size: 1.1rem; margin-top: 0.3rem; color: #2c4f6e;"><strong>Karibu Ruchugi!</strong> Share visionary ideas, class projects, and community solutions. Every great transformation starts with a single <strong>Mawazo</strong> 💭</p>
+  </div>
 
-    <div class="comment-form-container">
-        <h3>💬 Share Your Thoughts</h3>
-        <form method="post">
-            <div class="form-group">
-                <label>📝 Comment Type</label>
-                <select name="type">
-                    <option value="opinion">💡 Opinion - Share your thoughts and feedback</option>
-                    <option value="planning">📋 Planning - Suggest improvements or plans</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>✍️ Your Message</label>
-                <textarea name="content" required placeholder="Write your comment here..."></textarea>
-            </div>
-            <button type="submit" class="btn-submit">🚀 Post Comment</button>
-        </form>
-        <div class="info-note">
-            💡 You can post comments without logging in. Your voice matters!
-        </div>
-    </div>
+  <h2>🌟 Mawazo hub</h2>
+  <div class="cta-message">
+    <p>📢 Have a brilliant idea? Share it with the community!</p>
+    <a href="login.php" class="btn-login">✨ Login to submit →</a>
+  </div>
 
-    <div class="comments-section">
-        <h3>
-            💬 Community Discussion 
-            <span class="comments-count"><?php echo count($opinions); ?> comments</span>
-        </h3>
-        
-        <?php if(count($opinions) === 0): ?>
-            <div class="empty-comments">
-                <p>🌟 No comments yet</p>
-                <p>Be the first to share your thoughts on this project!</p>
-            </div>
-        <?php else: ?>
-            <?php foreach($opinions as $o): ?>
-                <div class="comment-card">
-                    <div class="comment-header">
-                        <div>
-                            <span class="comment-type <?php echo $o['type']; ?>">
-                                <?php echo $o['type'] === 'opinion' ? '💡 Opinion' : '📋 Planning'; ?>
-                            </span>
-                        </div>
-                        <div>
-                            <span class="comment-author">👤 <?php echo htmlspecialchars($o['author']); ?></span>
-                            <span class="comment-date">• <?php echo date('M d, Y', strtotime($o['created_at'])); ?></span>
-                        </div>
-                    </div>
-                    <div class="comment-content">
-                        <?php echo nl2br(htmlspecialchars($o['content'])); ?>
-                    </div>
-                </div>
-            <?php endforeach; ?>
-        <?php endif; ?>
+  <h3>📌 Mawazo yote — trending concepts</h3>
+  
+  <!-- dynamic ideas showcase with creative mock data reflecting real ideas from secondary students -->
+  <div class="ideas-grid">
+    <div class="idea-item">
+      <div class="idea-emoji">🌍</div>
+      <div class="idea-content">
+        <div class="idea-title">Green corner: school recycling initiative</div>
+        <div class="idea-desc">A student-led project to reduce plastic waste around Ruchugi compound. Build eco-bricks and monthly collection points.</div>
+        <div class="idea-meta">👥 by Form 3A team | ❤️ 24 reactions | 🗓️ 2 days ago</div>
+      </div>
     </div>
+    <div class="idea-item">
+      <div class="idea-emoji">🤖</div>
+      <div class="idea-content">
+        <div class="idea-title">STEM Club: Low-cost water pump prototype</div>
+        <div class="idea-desc">Using recycled materials and simple mechanics to help local farms. Call for volunteers and workshop this term.</div>
+        <div class="idea-meta">👥 by Innovators Group | ❤️ 18 reactions | 🗓️ last week</div>
+      </div>
+    </div>
+    <div class="idea-item">
+      <div class="idea-emoji">📖</div>
+      <div class="idea-content">
+        <div class="idea-title">Digital library access (offline archive)</div>
+        <div class="idea-desc">Collect e-books, notes, and past papers on a local server. Reduce cost of learning materials for all forms.</div>
+        <div class="idea-meta">👥 by Mawazo Crew | ❤️ 37 reactions | 🗓️ 5 days ago</div>
+      </div>
+    </div>
+    <div class="idea-item">
+      <div class="idea-emoji">🎨</div>
+      <div class="idea-content">
+        <div class="idea-title">Talent showcase — art & culture festival</div>
+        <div class="idea-desc">Annual event to celebrate music, poetry, drama, and traditional dances. Strengthen unity and creativity.</div>
+        <div class="idea-meta">👥 by Culture Committee | ❤️ 42 reactions | 🗓️ 3 days ago</div>
+      </div>
+    </div>
+    <div class="idea-item">
+      <div class="idea-emoji">⚡</div>
+      <div class="idea-content">
+        <div class="idea-title">Tech up: coding workshop for beginners</div>
+        <div class="idea-desc">Introduce HTML/CSS, problem-solving, and build mini web projects. Saturday classes available.</div>
+        <div class="idea-meta">👥 by CS club | ❤️ 31 reactions | 🗓️ 1 week ago</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- subtle note: login to submit new idea -->
+  <div style="background: #eef2fa; border-radius: 2rem; padding: 0.8rem 1.5rem; margin-top: 0.5rem; text-align: center; font-size: 0.9rem;">
+    💡 <strong>Be part of the change</strong> — <a href="login.php" style="color:#e67e22; font-weight:600;">Login now</a> to post your own Mawazo, comment, or vote for best ideas.
+  </div>
 </main>
 
-<?php include 'footer.php'; ?>
+<footer>
+  <hr>
+  <p>© form_2021 Ruchugi Secondary — fostering innovation, community, and future leaders.</p>
+</footer>
+
+<!-- optional small hover interaction to make the login call-out smoother -->
+</body>
+</html>
