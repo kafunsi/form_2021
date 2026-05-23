@@ -11,7 +11,7 @@
 }
 
 *{box-sizing:border-box}
-body{font-family:var(--font-stack);color:var(--text);background:var(--bg);margin:0;padding:18px;line-height:1.45;-webkit-font-smoothing:antialiased}
+body{font-family:var(--font-stack);color:var(--text);background:var(--bg) url('background.jpg') center/cover no-repeat fixed;margin:0;padding:18px;line-height:1.45;-webkit-font-smoothing:antialiased}
 header h1{margin:0;font-size:1.6rem}
 header, main, footer, form, .project{max-width:var(--max-width);margin:0 auto;padding:0 16px}
 
